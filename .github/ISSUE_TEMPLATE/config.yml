@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+
+issue_templates:
+  - name: Bug report (English)
+    description: Report a matching/parsing issue in English
+    file: bug_report.md
+  - name: 錯誤回報（繁體中文）
+    description: 以繁體中文回報匹配或解析問題
+    file: bug_report.zh-TW.md

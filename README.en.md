@@ -56,4 +56,4 @@ Or via calibre GUI:
 - idna (BSD-3-Clause)
 
 ## License
-See `LICENSE`.
+See [LICENSE](LICENSE).

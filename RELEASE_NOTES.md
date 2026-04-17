@@ -1,5 +1,7 @@
 # Release Notes
 
+English | [繁體中文](RELEASE_NOTES.zh-TW.md)
+
 ## v1.0.5 - Stable public release (volume-safe matching)
 
 First stable public release focused on accurate manga metadata matching from Kobo.

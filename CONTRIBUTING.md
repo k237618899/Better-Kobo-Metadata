@@ -1,5 +1,7 @@
 # Contributing
 
+English | [繁體中文](CONTRIBUTING.zh-TW.md)
+
 Thanks for contributing.
 
 ## Development Flow
