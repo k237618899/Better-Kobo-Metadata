@@ -1,0 +1,16 @@
+# Build outputs
+dist/*.zip
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Local logs and scratch files
+logs/*.log
+*.tmp
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
