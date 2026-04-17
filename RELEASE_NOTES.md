@@ -26,8 +26,8 @@ This release targets real-world bulk metadata workflows where wrong picks common
 ### Package
 - Plugin zip: dist/BetterKoboMetadata.zip
 
-### Suggested release page assets
-- Add before/after screenshots that show wrong-volume selection fixed in bulk matching.
+### Reserved assets
+- Will Add before/after screenshots that show wrong-volume selection fixed in bulk matching.
 
 ---
 
