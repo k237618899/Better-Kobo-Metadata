@@ -5,11 +5,14 @@ English | [繁體中文](README.zh-TW.md)
 Better Kobo Metadata is a calibre metadata source plugin focused on reliable manga volume matching for Kobo results.
 
 ## Highlights
-- Volume-aware matching to avoid wrong picks such as `1` vs `19`/`20`.
-- Author-aware disambiguation for same-title collisions.
-- Manga vs light novel tie-break handling for ambiguous results.
-- Stronger fallback extraction for `publisher`, `series`, and `pubdate`.
-- Improved high-resolution cover URL normalization and cover cache behavior.
+- Volume-aware matching: normalized CJK/western volume formats (第N卷, Vol.N, leading zeroes) to avoid wrong picks such as `1` vs `19`/`20`.
+- Metadata-based re-ranking: scores candidates using fully parsed title and `series_index`, not just search-page snippets.
+- Author-aware disambiguation: normalized multi-separator author matching with strong overlap tie-breaking.
+- Manga vs light novel tie-break: tag/series/title-based manga detection for ambiguous multi-author results.
+- Stronger fallback extraction: `ld+json` and inline JSON structured data for `publisher`, `series`, `series_index`, and `pubdate`.
+- Series derivation from title: fallback series name when Kobo omits explicit series blocks.
+- CJK spacing normalization: removes accidental spaces between CJK characters in extracted fields.
+- Configurable cover candidate count for volume-aware cover fetching.
 
 ## Requirements
 - calibre 5.0+

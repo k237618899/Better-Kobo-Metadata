@@ -148,12 +148,28 @@ def _normalize_person_name(name: str) -> str:
     return n.lower()
 
 
+def _normalized_author_set(authors: Optional[List[str]]) -> set[str]:
+    """Build a normalized author set, splitting combined author strings from metadata sources."""
+    if not authors:
+        return set()
+
+    expanded: List[str] = []
+    for author in authors:
+        if not author:
+            continue
+        # Some sources return multiple authors in one field, e.g. "A,B".
+        parts = re.split(r"\s*(?:,|，|、|/|／|;|；|\||&|＆| and )\s*", str(author), flags=re.IGNORECASE)
+        expanded.extend(p for p in parts if p)
+
+    return {_normalize_person_name(x) for x in expanded if x}
+
+
 def _author_match_bonus(query_authors: Optional[List[str]], candidate_authors: Optional[List[str]]) -> int:
     """Strong tie-breaker: prefer exact/normalized author matches."""
     if not query_authors:
         return 0
-    qset = {_normalize_person_name(x) for x in query_authors if x}
-    cset = {_normalize_person_name(x) for x in (candidate_authors or []) if x}
+    qset = _normalized_author_set(query_authors)
+    cset = _normalized_author_set(candidate_authors)
     if not cset:
         return -10
     if qset.intersection(cset):
@@ -164,8 +180,8 @@ def _author_match_bonus(query_authors: Optional[List[str]], candidate_authors: O
 def _author_overlap_count(query_authors: Optional[List[str]], candidate_authors: Optional[List[str]]) -> int:
     if not query_authors or not candidate_authors:
         return 0
-    qset = {_normalize_person_name(x) for x in query_authors if x}
-    cset = {_normalize_person_name(x) for x in candidate_authors if x}
+    qset = _normalized_author_set(query_authors)
+    cset = _normalized_author_set(candidate_authors)
     return len(qset.intersection(cset))
 
 
@@ -406,7 +422,7 @@ class KoboMetadataImpl:
 
                         # If query mixes manga + LN authors, both candidates may tie on author bonus.
                         # In that ambiguous case, prefer manga-labeled candidates.
-                        if authors and len([a for a in authors if a]) > 1:
+                        if len(_normalized_author_set(authors)) > 1:
                             overlap = _author_overlap_count(authors, getattr(mi, "authors", None))
                             if overlap > 0 and _is_manga_candidate(mi):
                                 score += 30
