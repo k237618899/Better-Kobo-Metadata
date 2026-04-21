@@ -4,7 +4,7 @@ from calibre.ebooks.metadata.sources.base import Option, Source
 class KoboMetadata(Source):
     name = "Better Kobo Metadata"
     author = "Jacob Hsu"
-    version = (1, 0, 5)
+    version = (1, 0, 6)
     minimum_calibre_version = (5, 0, 0)
     description = _("Downloads metadata and covers from Kobo with accurate volume/series matching")
 
