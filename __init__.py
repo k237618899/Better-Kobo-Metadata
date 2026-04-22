@@ -4,7 +4,7 @@ from calibre.ebooks.metadata.sources.base import Option, Source
 class KoboMetadata(Source):
     name = "Better Kobo Metadata"
     author = "Jacob Hsu"
-    version = (1, 0, 6)
+    version = (1, 0, 7)
     minimum_calibre_version = (5, 0, 0)
     description = _("Downloads metadata and covers from Kobo with accurate volume/series matching")
 
@@ -19,6 +19,7 @@ class KoboMetadata(Source):
             "languages",
             "series",
             "tags",
+            "rating",
         )
     )
     has_html_comments = True
@@ -70,20 +71,7 @@ class KoboMetadata(Source):
         "ww": _("Other"),
     }
 
-    SERVERS = {
-        "https://www.kobo.com/": _("Kobo Global"),
-        "https://www.kobo.com.tw/": _("Kobo Taiwan (mirror)"),
-    }
-
     options = (
-        Option(
-            "server",
-            "choices",
-            "https://www.kobo.com/",
-            _("Kobo server"),
-            _("Base server URL used for all Kobo requests"),
-            choices=SERVERS,
-        ),
         Option(
             "country",
             "choices",

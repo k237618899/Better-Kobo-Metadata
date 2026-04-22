@@ -6,12 +6,16 @@ Better Kobo Metadata is a calibre metadata source plugin focused on reliable man
 
 ## Highlights
 - Volume-aware matching: normalized CJK/western volume formats (第N卷, Vol.N, leading zeroes) to avoid wrong picks such as `1` vs `19`/`20`.
+- Decimal volume handling: preserves series numbers such as `13.5` instead of truncating them to the wrong volume.
 - Metadata-based re-ranking: scores candidates using fully parsed title and `series_index`, not just search-page snippets.
 - Author-aware disambiguation: normalized multi-separator author matching with strong overlap tie-breaking.
 - Manga vs light novel tie-break: tag/series/title-based manga detection for ambiguous multi-author results.
 - Stronger fallback extraction: `ld+json` and inline JSON structured data for `publisher`, `series`, `series_index`, and `pubdate`.
+- Expanded field extraction: parses localized book-detail fields for language, Kobo book ID, valid ISBN, and EAN-style identifiers.
+- Calibre-friendly rating import: reads Kobo ratings and writes them on calibre's 0-5 scale with half-star steps.
 - Series derivation from title: fallback series name when Kobo omits explicit series blocks.
 - CJK spacing normalization: removes accidental spaces between CJK characters in extracted fields.
+- Global-host only: uses the stable `kobo.com` endpoint; unsupported mirror host handling has been removed.
 - Configurable cover candidate count for volume-aware cover fetching.
 
 ## Requirements
@@ -33,12 +37,12 @@ bash scripts/build.sh
 ```
 
 Output package:
-- `dist/BetterKoboMetadata.zip`
+- `dist/BetterKoboMetadata-v1.0.7.zip`
 
 ## Install
 
 ```bash
-/opt/calibre/calibre-customize -a dist/BetterKoboMetadata.zip
+/opt/calibre/calibre-customize -a dist/BetterKoboMetadata-v1.0.7.zip
 ```
 
 Or via calibre GUI:

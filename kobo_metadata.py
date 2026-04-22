@@ -38,24 +38,35 @@ def _normalize_title_for_match(title: str) -> str:
 
 def _extract_volume(title: str):
     """Return (normalized_base_title, volume_number | None) for common CJK/western formats."""
-    normalized = _normalize_title_for_match(title)
+    raw = _normalize_digits(title)
+    raw = raw.replace("（", "(").replace("）", ")")
+    number = r"([0-9]+(?:\.[0-9]+)?)"
     patterns = [
-        r"(?:^|\s)(\d+)(?:\s*$)",                 # trailing number
-        r"(?:^|\s)(\d+)(?:\s*(?:卷|集|册|冊|話|话|巻))",  # 1卷
-        r"(?:^|\s)(?:卷|集|册|冊|話|话|巻)\s*(\d+)",      # 卷1
-        r"\(\s*(\d+)\s*\)",
+        rf"第\s*{number}\s*[卷集册冊話话巻]",                     # 第13.5卷
+        rf"[Vv](?:ol|OLUME)?\.?\s*{number}",                    # Vol.13.5
+        rf"\(\s*{number}\s*\)",                               # (13.5)
+        rf"(?:^|\s){number}(?:\s*(?:卷|集|册|冊|話|话|巻))",      # 13.5卷
+        rf"(?:^|\s)(?:卷|集|册|冊|話|话|巻)\s*{number}",          # 卷13.5
+        rf"(?:^|\s){number}(?:\s*$)",                           # trailing 13.5
     ]
     volume = None
     for pat in patterns:
-        m = re.search(pat, normalized, flags=re.IGNORECASE)
+        m = re.search(pat, raw, flags=re.IGNORECASE)
         if m:
-            volume = int(m.group(1))
-            break
+            try:
+                volume = float(m.group(1))
+                break
+            except Exception:
+                pass
 
     # Remove recognized volume fragments from base title for fair comparison.
-    base = re.sub(r"\(\s*\d+\s*\)", " ", normalized)
-    base = re.sub(r"(?:^|\s)\d+(?:\s*$)", " ", base)
-    base = re.sub(r"\s+", " ", base).strip()
+    base = raw
+    base = re.sub(r"第\s*[0-9]+(?:\.[0-9]+)?\s*[卷集册冊話话巻]", " ", base, flags=re.IGNORECASE)
+    base = re.sub(r"[Vv](?:ol|OLUME)?\.?\s*[0-9]+(?:\.[0-9]+)?", " ", base)
+    base = re.sub(r"\(\s*[0-9]+(?:\.[0-9]+)?\s*\)", " ", base)
+    base = re.sub(r"(?:^|\s)(?:卷|集|册|冊|話|话|巻)\s*[0-9]+(?:\.[0-9]+)?", " ", base)
+    base = re.sub(r"(?:^|\s)[0-9]+(?:\.[0-9]+)?(?:\s*(?:卷|集|册|冊|話|话|巻))?(?:\s*$)", " ", base)
+    base = _normalize_title_for_match(base)
     return base, volume
 
 
@@ -111,10 +122,10 @@ def _derive_series_from_title(title: str) -> Optional[str]:
         return None
     t = _normalize_digits(title)
     # Remove common volume notations from title.
-    t = re.sub(r"[\(（]\s*\d+\s*[\)）]", " ", t)
-    t = re.sub(r"第\s*\d+\s*[卷集册冊話话巻]", " ", t, flags=re.IGNORECASE)
-    t = re.sub(r"[Vv](?:ol|OLUME)?\.?\s*\d+", " ", t)
-    t = re.sub(r"\s+\d+\s*$", " ", t)
+    t = re.sub(r"[\(（]\s*\d+(?:\.\d+)?\s*[\)）]", " ", t)
+    t = re.sub(r"第\s*\d+(?:\.\d+)?\s*[卷集册冊話话巻]", " ", t, flags=re.IGNORECASE)
+    t = re.sub(r"[Vv](?:ol|OLUME)?\.?\s*\d+(?:\.\d+)?", " ", t)
+    t = re.sub(r"\s+\d+(?:\.\d+)?\s*$", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t or None
 
@@ -129,8 +140,8 @@ def _metadata_match_score(query_title: str, mi: Metadata) -> int:
         series_idx = getattr(mi, "series_index", None)
         if series_idx is not None:
             try:
-                si = int(float(series_idx))
-                if si == int(q_vol):
+                si = float(series_idx)
+                if abs(si - float(q_vol)) < 1e-9:
                     score += 25
                 else:
                     score -= 25
@@ -198,16 +209,16 @@ def _is_manga_candidate(mi: Metadata) -> bool:
     return False
 
 
-def _candidate_volume(mi: Metadata) -> Optional[int]:
+def _candidate_volume(mi: Metadata) -> Optional[float]:
     """Get candidate volume from title first, then series_index."""
     title = getattr(mi, "title", "") or ""
     _, vol_from_title = _extract_volume(title)
     if vol_from_title is not None:
-        return int(vol_from_title)
+        return float(vol_from_title)
     series_idx = getattr(mi, "series_index", None)
     if series_idx is not None:
         try:
-            return int(float(series_idx))
+            return float(series_idx)
         except Exception:
             return None
     return None
@@ -249,10 +260,8 @@ class KoboMetadataImpl:
         self.plugin = plugin
 
     def _base_url(self, prefs: Dict[str, any]) -> str:
-        base = prefs.get("server", self.BASE_URL) or self.BASE_URL
-        if not base.endswith("/"):
-            base += "/"
-        return base
+        # Mirror hosts are removed; always use the stable global Kobo endpoint.
+        return self.BASE_URL
 
     def _get_unescaped_page_text(self, page: html.Element) -> str:
         page_text = html.tostring(page, encoding="unicode")
@@ -406,7 +415,10 @@ class KoboMetadataImpl:
                 # Hard guard: if query has explicit volume, keep only same-volume candidates.
                 _, target_vol = _extract_volume(title or "")
                 if target_vol is not None:
-                    same_vol = [mi for mi in fetched_metadata if _candidate_volume(mi) == int(target_vol)]
+                    same_vol = [
+                        mi for mi in fetched_metadata
+                        if _candidate_volume(mi) is not None and abs(_candidate_volume(mi) - float(target_vol)) < 1e-9
+                    ]
                     if same_vol:
                         fetched_metadata = same_vol
                         log.info(
@@ -702,28 +714,42 @@ class KoboMetadataImpl:
 
         book_details_elements = page.xpath("//div[contains(@class, 'bookitem-secondary-metadata')]//li")
         if book_details_elements:
-            publisher_labels = {"Publisher:", "Publisher", "出版社:", "出版社", "出版者:", "出版者"}
+            log.info(f"KoboMetadata::parse_book_page: Found {len(book_details_elements)} detail elements")
+            publisher_labels = {"Publisher:", "Publisher", "出版社:", "出版社", "出版者:", "出版者", "版本說明:", "版本说明:", "版本說明：", "版本说明："}
             date_labels = {
                 "Release Date:",
                 "Release date:",
                 "Release Date",
                 "Release date",
                 "出版日期:",
+                "出版日期：",
                 "發售日期:",
+                "發售日期：",
                 "发行日期:",
+                "发行日期：",
                 "上市日期:",
+                "上市日期：",
             }
-            language_labels = {"Language:", "Language", "語言:", "语言:"}
-            id_labels = {"ISBN:", "Book ID:", "ISBN", "Book ID"}
+            language_labels = {"Language:", "Language", "語言:", "语言:", "語言：", "语言：", "語言", "语言"}
+            id_labels = {"ISBN:", "Book ID:", "ISBN", "Book ID", "書籍ID:", "书籍ID:", "書籍ID：", "书籍ID：", "書籍ID", "书籍ID"}
 
             for idx, x in enumerate(book_details_elements):
                 descriptor = (x.xpath("normalize-space(text()[1])") or "").strip()
+                # Normalize full-width colon to ASCII colon for matching
+                descriptor_norm = descriptor.replace("：", ":")
                 span_nodes = x.xpath("span")
                 value = (span_nodes[0].text_content() if span_nodes else x.text_content() or "").strip()
                 if descriptor and value.startswith(descriptor):
                     value = value[len(descriptor):].strip()
+                # Also strip if value starts with full-width-colon variant
+                if descriptor_norm and value.startswith(descriptor_norm):
+                    value = value[len(descriptor_norm):].strip()
+                log.info(f"KoboMetadata::parse_book_page: detail[{idx}] descriptor={repr(descriptor)} value={repr(value)}")
 
-                if descriptor in publisher_labels and value:
+                # Normalize descriptor for label matching (replace full-width colon)
+                d = descriptor_norm
+
+                if d in publisher_labels and value:
                     metadata.publisher = value
                     log.info(f"KoboMetadata::parse_book_page: Got publisher: {metadata.publisher}")
                     continue
@@ -732,18 +758,39 @@ class KoboMetadataImpl:
                     log.info(f"KoboMetadata::parse_book_page: Got publisher (first detail): {metadata.publisher}")
                     continue
 
-                if descriptor in date_labels and value:
+                if d in date_labels and value:
                     try:
                         metadata.pubdate = parse_only_date(value)
                         log.info(f"KoboMetadata::parse_book_page: Got pubdate: {metadata.pubdate}")
                     except Exception as e:
                         log.info(f"KoboMetadata::parse_book_page: Could not parse pubdate '{value}': {e}")
-                elif descriptor in id_labels and value:
-                    metadata.isbn = value
-                    log.info(f"KoboMetadata::parse_book_page: Got isbn: {metadata.isbn}")
-                elif descriptor in language_labels and value:
-                    metadata.language = value
-                    log.info(f"KoboMetadata::parse_book_page: Got language: {metadata.language}")
+                elif d in id_labels and value:
+                    clean_isbn = re.sub(r"[^0-9X]", "", value.upper())
+                    valid_isbn = check_isbn(clean_isbn) if clean_isbn else None
+                    if valid_isbn:
+                        metadata.isbn = valid_isbn
+                        metadata.set_identifier("isbn", valid_isbn)
+                        log.info(f"KoboMetadata::parse_book_page: Got isbn: {valid_isbn}")
+                    elif clean_isbn:
+                        metadata.set_identifier("ean", clean_isbn)
+                        log.info(f"KoboMetadata::parse_book_page: Got ean (non-isbn book id): {clean_isbn}")
+                elif d in language_labels and value:
+                    # Map human-readable language names to ISO 639 codes calibre accepts
+                    _LANG_MAP = {
+                        "中文": "zh", "繁體中文": "zh", "简体中文": "zh", "漢語": "zh", "汉语": "zh",
+                        "日本語": "ja", "日語": "ja", "日文": "ja", "japanese": "ja",
+                        "english": "en", "英文": "en", "英語": "en",
+                        "korean": "ko", "韓文": "ko", "韓語": "ko", "한국어": "ko",
+                        "french": "fr", "法文": "fr", "法語": "fr",
+                        "german": "de", "德文": "de", "德語": "de",
+                        "spanish": "es", "西班牙文": "es",
+                        "portuguese": "pt", "葡萄牙文": "pt",
+                        "italian": "it", "義大利文": "it",
+                        "dutch": "nl", "荷蘭文": "nl",
+                    }
+                    lang_code = _LANG_MAP.get(value.strip(), _LANG_MAP.get(value.strip().lower(), value))
+                    metadata.language = lang_code
+                    log.info(f"KoboMetadata::parse_book_page: Got language: {value!r} -> {lang_code}")
 
         # Structured fallback for pages with changed DOM (common in bulk and some volume-1 pages).
         structured = self._extract_structured_fallback(page, log)
@@ -772,6 +819,15 @@ class KoboMetadataImpl:
             # Calibre doesnt like commas in tags
             metadata.tags = {x.get("content").replace(", ", " ") for x in tags_elements}
             log.info(f"KoboMetadata::parse_book_page: Got tags: {metadata.tags}")
+
+        # Rating: try JSON-LD aggregateRating first, then DOM
+        rating = self._extract_rating(page, log)
+        if rating is not None:
+            metadata.rating = rating
+            log.info(
+                "KoboMetadata::parse_book_page: Got rating "
+                f"display={float(metadata.rating):.1f}/5"
+            )
 
         synopsis_elements = page.xpath("//div[@data-full-synopsis='']")
         if synopsis_elements:
@@ -808,6 +864,97 @@ class KoboMetadataImpl:
             return None
 
         return metadata
+
+    def _extract_rating(self, page: html.Element, log: Log) -> Optional[float]:
+        """Extract book rating from JSON-LD aggregateRating or DOM, returned on calibre's 0-5 scale."""
+        def _to_calibre_scale(raw_value, raw_best=5) -> Optional[float]:
+            try:
+                rv = float(raw_value)
+                best = float(raw_best) if raw_best not in (None, "") else 5.0
+                if best <= 0:
+                    best = 5.0
+                rating_5 = (rv / best) * 5.0
+                rating_5 = max(0.0, min(5.0, rating_5))
+                # Calibre displays stars in half-star increments.
+                return round(rating_5 * 2) / 2.0
+            except Exception:
+                return None
+
+        def _log_rating(source: str, raw_value, raw_best, rating_5: float) -> float:
+            try:
+                normalized_5 = (float(raw_value) / float(raw_best)) * 5.0
+            except Exception:
+                normalized_5 = float(rating_5)
+            log.info(
+                "KoboMetadata::extract_rating: "
+                f"source={source} raw={raw_value}/{raw_best} normalized_5={normalized_5:.2f}/5 "
+                f"display_5={float(rating_5):.1f}/5"
+            )
+            return rating_5
+
+        # 1. JSON-LD
+        scripts = page.xpath("//script[@type='application/ld+json']/text()")
+        for raw in scripts:
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            nodes = data if isinstance(data, list) else [data]
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                agg = node.get("aggregateRating")
+                if isinstance(agg, dict):
+                    rv = agg.get("ratingValue")
+                    best = agg.get("bestRating", 5)
+                    if rv is not None:
+                        rating = _to_calibre_scale(rv, best)
+                        if rating is not None:
+                            return _log_rating("jsonld.aggregateRating", rv, best, rating)
+
+        # 2. Open Graph meta fallback (Kobo TW commonly exposes rating here)
+        og_rating = page.xpath("string(//meta[@property='og:rating']/@content)").strip()
+        if og_rating:
+            og_scale = page.xpath("string(//meta[@property='og:rating_scale']/@content)").strip() or "5"
+            og_count = page.xpath("string(//meta[@property='og:rating_count']/@content)").strip()
+            try:
+                if og_count and float(og_count) <= 0:
+                    log.info("KoboMetadata::extract_rating: og:rating_count is 0; skipping rating")
+                else:
+                    rating = _to_calibre_scale(og_rating, og_scale)
+                    if rating is not None:
+                        return _log_rating("meta.og:rating", og_rating, og_scale, rating)
+            except Exception:
+                rating = _to_calibre_scale(og_rating, og_scale)
+                if rating is not None:
+                    return _log_rating("meta.og:rating", og_rating, og_scale, rating)
+
+        # 3. DOM fallback: <span class="rating-count"> or data-rating attribute
+        for xpath in [
+            "//span[@class='rating-count']/@data-rating",
+            "//*[@itemprop='ratingValue']/text()",
+            "//meta[@itemprop='ratingValue']/@content",
+        ]:
+            vals = page.xpath(xpath)
+            if vals:
+                raw_value = str(vals[0]).strip()
+                rating = _to_calibre_scale(raw_value, 5)
+                if rating is not None:
+                    return _log_rating(f"dom:{xpath}", raw_value, 5, rating)
+
+        # 4. Inline JSON fallback
+        text = self._get_unescaped_page_text(page)
+        m = re.search(r'"ratingValue"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?', text)
+        if m:
+            raw_value = m.group(1)
+            rating = _to_calibre_scale(raw_value, 5)
+            if rating is not None:
+                return _log_rating("inline-json:ratingValue", raw_value, 5, rating)
+
+        log.info("KoboMetadata::extract_rating: No rating found on page")
+        return None
 
     def _extract_pubdate_from_jsonld(self, page: html.Element, log: Log):
         scripts = page.xpath("//script[@type='application/ld+json']/text()")
@@ -865,7 +1012,7 @@ class KoboMetadataImpl:
             elif src.startswith("//"):
                 cover_url = "https:" + src
             elif src.startswith("/"):
-                cover_url = "https://www.kobo.com" + src
+                cover_url = self._base_url(prefs).rstrip("/") + src
             else:
                 cover_url = src
             if prefs["resize_cover"]:

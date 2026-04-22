@@ -2,6 +2,23 @@
 
 English | [繁體中文](RELEASE_NOTES.zh-TW.md)
 
+## v1.0.7 - Metadata field expansion, rating fix, decimal volume handling, and mirror cleanup
+
+### Highlights
+- Added extraction of book-detail fields exposed on Kobo pages, including language and book identifier values from locale-specific labels such as `語言：` and `書籍ID：`.
+- Added language-name normalization to calibre-compatible ISO codes (for example `中文` -> `zh`) so the language field is written correctly instead of being dropped.
+- Added EAN support for Kobo book IDs that are not valid ISBNs; valid ISBNs are still stored as `isbn`, while non-ISBN numeric book IDs are stored as `ean`.
+- Improved localized detail parsing with full-width colon handling (`：`) and better field matching across traditional/simplified Chinese labels.
+- Added rating extraction from Kobo Open Graph metadata (`og:rating`, `og:rating_scale`, `og:rating_count`) with detailed diagnostics in logs.
+- Fixed rating writeback to use calibre's actual 0-5 scale (half-star steps), preventing inflated 5-star results caused by mistaken 0-10 conversion.
+- Added explicit rating diagnostics in logs (`raw`, `normalized_5`, and final display value) to simplify troubleshooting.
+- Fixed decimal volume parsing and matching (`13.5`, `Vol.13.5`, `第13.5卷`) so `series_index` is no longer truncated or overwritten incorrectly.
+- Improved title-derived series handling so decimal volume markers are stripped safely without corrupting the base series name.
+- Removed Kobo mirror server support (`kobo.com.tw`) and now always use the stable global host (`kobo.com`).
+- Build output now includes plugin version in filename, e.g. `dist/BetterKoboMetadata-v1.0.7.zip`.
+
+---
+
 ## v1.0.6 - Improved title normalization, structured data extraction, and CJK support
 
 ### Highlights
